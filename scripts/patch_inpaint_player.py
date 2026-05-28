@@ -341,13 +341,12 @@ draw();
 # ── New cell source ───────────────────────────────────────────────────────────
 NEW_SOURCE = r'''#@title 7 — Inpainting
 import base64
-from io import BytesIO
 from IPython.display import Javascript
 from google.colab import files as colab_files
 from google.colab import output as _colab_output
 
 # All other names: widgets, Layout, Audio, clear_output, HTML, display,
-# torchaudio, torch, SAMPLE_RATE, time, tempfile, get_model, SPINNER_HTML,
+# torchaudio, torch, SAMPLE_RATE, time, tempfile, os, get_model, SPINNER_HTML,
 # _model_cache, _is_model_on_disk, MODEL_CONFIGS, _session_audio
 
 
@@ -446,9 +445,11 @@ def _load_audio_into_state(audio_tensor, label):
         f' &nbsp;|&nbsp; {audio_tensor.shape[0]} ch'
         f'</div>'
     )
-    buf = BytesIO()
-    torchaudio.save(buf, audio_tensor.cpu(), SAMPLE_RATE, format='wav')
-    b64      = base64.b64encode(buf.getvalue()).decode('ascii')
+    _tmp = tempfile.mktemp(suffix='.wav', dir='/tmp')
+    torchaudio.save(_tmp, audio_tensor.cpu(), SAMPLE_RATE)
+    with open(_tmp, 'rb') as _f:
+        b64 = base64.b64encode(_f.read()).decode('ascii')
+    import os as _os; _os.unlink(_tmp)
     data_url = f'data:audio/wav;base64,{b64}'
     display(Javascript(
         f'if(window.sa3LoadAudio)'
