@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stamp cell-02-title in the notebook with the current UTC date/time.
+"""Stamp cell-02-title in the notebook with the current local date/time and timezone.
 
 Run automatically by the pre-commit hook whenever the notebook is staged.
 Can also be run manually: python3 scripts/bump_notebook_version.py
@@ -7,14 +7,18 @@ Can also be run manually: python3 scripts/bump_notebook_version.py
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
 NOTEBOOK  = REPO_ROOT / "stable_audio_3_demo.ipynb"
 TARGET_ID = "cell-02-title"
-VERSION_RE = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC")
-STAMP = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+# Matches any prior stamp regardless of timezone label (UTC, IDT, EST, +0300, …)
+VERSION_RE = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} \S+")
+
+_local = datetime.now().astimezone()
+_tz    = _local.strftime("%Z") or _local.strftime("%z")
+STAMP  = _local.strftime("%Y-%m-%d %H:%M") + f" {_tz}"
 
 
 def main() -> None:
