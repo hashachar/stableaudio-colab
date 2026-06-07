@@ -10,22 +10,32 @@ Make music from a text prompt, edit it, remix it, and morph clips into each othe
 
 This link always opens the latest version in Colab. Run the short setup cells once (pick a GPU runtime if you can), then jump to whichever tool you want. Each tool has its own controls and a single run button.
 
-## What you can do
+All five tools run on the same latent rectified-flow diffusion model: your audio
+is encoded into a compact **latent** representation, the model denoises it, and
+the result is decoded back to a waveform. Most tools share a few controls:
+
+- **Prompt / negative prompt** — what to generate, and what to avoid.
+- **Steps** — number of diffusion (denoising) steps; more steps = higher quality, slower.
+- **CFG scale** (classifier-free guidance) — how strongly the output is pushed toward the prompt. Low = loose, high = literal.
+- **Seed** — fix it to reproduce a result, or randomize for a new take.
 
 ### 🎵 Text-to-music
-Describe what you want — *"warm lo-fi piano with vinyl crackle, 70 bpm"* — and get audio back. You set the length, how random each take is, and how closely it sticks to your words.
+Generate audio from a text prompt — *"warm lo-fi piano with vinyl crackle, 70 bpm"*. The model denoises from pure random noise into a clip. Controls: prompt, duration, steps, CFG scale, seed.
 
 ### ✂️ Inpainting (audio editing)
-Load a clip, mark a start and end time, and replace just that slice with something new from a prompt. Everything outside the marked region stays exactly as it was — handy for fixing a rough section or dropping in a new phrase.
+Replace a chosen time region of a clip while keeping everything outside it untouched. The clip is encoded to latents, a mask covers the `[start, end]` seconds you pick, and only the masked region is regenerated from the prompt — the unmasked latents are held fixed at every denoising step, so the surrounding audio is preserved. Good for fixing a section or dropping in a new phrase.
 
 ### 🔀 Audio-to-Audio (variations)
-Feed in a clip and get a fresh take that keeps its overall musical feel. A single "how different" dial takes you from a subtle remix all the way to a loose reinterpretation.
+Generate a variation of an existing clip. The source is encoded to latents and mixed with random noise at a chosen **noise level** before denoising: low noise stays close to the original (subtle remix), high noise drifts further (loose reinterpretation). Add a prompt and raise CFG to steer the variation.
 
 ### 🎚️ RF-Inversion (re-style)
-Re-skin a clip in a new style while keeping its underlying structure — the rhythm and shape of the original stay, but the character changes. It does this by first working out the exact "noise fingerprint" the model would need to recreate your clip, then regenerating from that fingerprint with your new prompt. Two dials let you trade off how faithful the result stays versus how freely it follows the prompt.
+Re-style a clip while preserving its structural identity — melody and rhythm stay, timbre and character change. Unlike audio-to-audio (which just adds random noise), **RF-Inversion** runs the rectified-flow ODE *backwards* to recover the specific "noise fingerprint" the model would denoise back into your clip, then regenerates from that fingerprint with your new prompt. Two controls shape the trade-off:
+
+- **Gamma (γ)** — inversion strength. Low γ keeps the fingerprint close to the model's own representation of the audio (faithful); high γ pushes it toward generic Gaussian noise (more freedom to change).
+- **Eta (η)** — structure preservation during regeneration. Higher η pulls each step back toward the original, locking in its structure while the prompt re-styles the surface.
 
 ### 🌅 Audio Transition (morph)
-Blend two clips into one smooth A→B transition. Choose how long the crossover lasts and the shape of its curve. An optional repair pass cleans up the seam — either a quick smoothing, or (with a toggle) the more structure-preserving RF-Inversion method.
+Blend two clips into a single A→B transition. Both are encoded to latents, and across a transition region the latent frames are crossfaded with **spherical interpolation (slerp)** — a blend that follows the curved geometry of the latent space instead of a straight line. You set the transition length and curve. An optional **re-coherence** pass repairs the seam by running the morph back through the model at a low noise level; a toggle switches that repair from the default audio-to-audio pass to the structure-preserving RF-Inversion method.
 
 ## Models
 
