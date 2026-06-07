@@ -131,26 +131,41 @@ The denoising schedule then runs from `sigma_max = noise_level` down to 0.
 
 Based on *"Semantic Image Inversion and Editing using Rectified SDEs"*. Instead of blending random noise into the audio latent, it runs a **forward ODE** to find the latent "noise fingerprint" of the audio — the noise vector that the model would denoise back into the source. Generation then denoises from that fingerprint with a new prompt, preserving structural identity while adopting the prompt's character.
 
-**Two phases:**
-1. **Inversion (t: 0→1):** Forward ODE using the model's unconditional velocity + a noise-direction correction:
-   ```
-   v = v_uncond + γ × (v_noise − v_uncond)
-   ```
-   where `v_noise = (y_1 − y) / (1 − t)` pulls toward Gaussian noise.
-2. **Generation (t: 1→0):** Standard denoising starting from the inverted latent, guided by the re-style prompt.
+This is implemented for real — **both** RF-Inversion controllers run directly on the rectified-flow model (not a substitute). Velocities come from `sa3.dit` (`= sa3.model.model`, the `DiTWrapper` the library's own samplers call), and conditioning, padding mask, and the timestep schedule are built the same way `generate()` builds them. Convention (verified against `sample_discrete_euler`): **t=1 is pure noise, t=0 is data**, and the model returns velocity `v` with `denoised = x − t·v`, i.e. `v = noise − data`.
 
-**Gamma (γ) guidance:**
+**Two phases:**
+1. **Inversion — forward controlled ODE (t: 0→1):** integrate `y₀` (the encoded source latent) to a Gaussian "fingerprint" using the model's *unconditional* velocity blended with a controller toward a fixed target noise `y₁`:
+   ```
+   v = (1−γ)·v_uncond + γ·(y₁ − y)/(1 − t)
+   ```
+2. **Generation — reverse controlled ODE (t: 1→0):** denoise from the fingerprint with the *new* prompt's velocity (with CFG), blended (strength η, active while `t ≥ eta_stop`) with a controller pulling back toward the source latent `y₀`:
+   ```
+   v = (1−η)·v_edit + η·(x − y₀)/t          # η applied only while t ≥ eta_stop
+   ```
+   The η controller is what actually preserves structural identity — without it (η=0) Phase 2 is *identical* to the stock Euler sampler used by `model.generate()`, i.e. plain "denoise from inverted noise" (DDIM-style inversion).
+
+**Gamma (γ) guidance** — forward inversion strength:
 
 | γ | Use case |
 |---|---|
-| 0.0 | Pure model drift — best for style transfer with strong prompt |
+| 0.0 | Pure model drift — most semantic/faithful fingerprint, best for style transfer with strong prompt |
 | 0.2–0.35 ★ | Default. Balanced inversion |
-| 0.4–0.6 | Stronger push to noise; better for faithful reconstruction |
+| 0.4–0.6 | Stronger push to the chosen Gaussian; more editing freedom |
 | 0.7–1.0 | Heavy noise; approaches A2A behavior |
 
-**Implementation status:** The notebook attempts the full two-phase algorithm using model internals (`dm.conditioner`, `dm.get_conditioning_inputs`, forward ODE loop, then `sample_diffusion(noise=inverted_latents, ...)`). If the internal API is incompatible with a future package version, it falls back to guided A2A with a visible warning.
+**Eta (η) guidance** — reverse structure-preservation strength (default 0.0):
 
-**Recommended steps:** 50 (used for both phases). 20–30 for fast previews.
+| η | Use case |
+|---|---|
+| 0.0 | Off. Free re-style from the inverted fingerprint (Phase 2 = stock Euler sampler) |
+| 0.3–0.7 ★ | Locks the source's structure while still adopting the prompt |
+| 0.8–1.0 | Near-exact reconstruction; prompt has little effect |
+
+`eta_stop` (default 0.30) releases the structure controller once `t < eta_stop`, so the final denoising steps always follow the prompt; lower it to hold structure longer.
+
+**Implementation note:** The forward/reverse loops call `sa3.dit(x, t, cfg_scale=…, batch_cfg=True, rescale_cfg=True, padding_mask=…, apg_scale=1.0, **cond_inputs)`. `cond_inputs` is the flattened dict from `inner.get_conditioning_inputs(...)` and **must** include zero `inpaint_mask` / `inpaint_masked_input` input-concat channels (generate() always injects these — omitting them gives the DiT the wrong input channel count). A broad `try/except` still falls back to guided A2A on a genuine API break, but it now surfaces the real exception instead of claiming inversion is unavailable.
+
+**Recommended steps:** 50 (used for both phases). 20–30 for fast previews. Cost ≈ 3× a normal generate of the same step count (Phase 1 is unconditional 1×/step, Phase 2 is CFG 2×/step).
 
 ---
 
@@ -284,39 +299,45 @@ This is already in all three feature cells (inpainting, A2A, RF-Inversion).
 These are the internal model attributes accessed by the RF-Inversion cell. They may break on future package versions:
 
 ```python
-sa3 = get_model("medium")      # StableAudioModel
-dm  = sa3.model                # DiffusionCondWrapper
+sa3   = get_model("medium")    # StableAudioModel
+inner = sa3.model              # ConditionedDiffusionModelWrapper  (NOT the velocity field)
+dit   = sa3.dit                # = sa3.model.model — DiTWrapper, the velocity field samplers call
+pt    = inner.pretransform     # SAME autoencoder
 
-dm.sample_rate                 # int: 44100
-dm.pretransform                # autoencoder
-dm.pretransform.io_channels    # int: 2 (stereo)
-dm.pretransform.encode(audio)  # Tensor[B,C,T] → Tensor[B,C_lat,T_lat]
-dm.pretransform.decode(latent) # Tensor[B,C_lat,T_lat] → Tensor[B,C,T]
+inner.sample_rate              # int: 44100
+inner.io_channels              # latent channel count (== C_lat of encoded latents)
+pt.io_channels                 # int: 2 (stereo audio I/O)
+pt.downsampling_ratio          # audio_samples → latent frames
+pt.encode(audio)               # Tensor[B,C,T] → Tensor[B,C_lat,T_lat]
+pt.decode(latent, chunked=True)# Tensor[B,C_lat,T_lat] → Tensor[B,C,T]
 
-dm.conditioner(cond_list, device=str(device))  # encode text+timing
-dm.get_conditioning_inputs(cond_tensors)        # format for DiT
+# Conditioning — positional (metadata_list, device); MUST add zero inpaint channels:
+ct = inner.conditioner([{"prompt": "...", "seconds_total": dur}], str(device))
+ct["inpaint_mask"]         = [torch.zeros((1,1,T_lat), ...)]
+ct["inpaint_masked_input"] = [torch.zeros((1, inner.io_channels, T_lat), ...)]
+cond_inputs = inner.get_conditioning_inputs(ct)               # positive (flattened dict)
+neg_inputs  = inner.get_conditioning_inputs(ct, negative=True)# negative_* keys
 
-# Forward pass (used in inversion loop):
-dm(y, t_batch, cfg_scale=1.0, **cond_inputs)   # → velocity Tensor
+# Velocity field (the call the library's samplers make on model.model):
+dit(x, t_batch, cfg_scale=cfg, batch_cfg=True, rescale_cfg=True,
+    padding_mask=pm, apg_scale=1.0, **cond_inputs)   # → velocity Tensor
+# cfg_scale==1.0 → single conditional pass; cfg_scale>1.0 → internal batched CFG
+# (needs negative_* keys in cond_inputs, else a null embedding is used).
 
-# Low-level sampler (used to denoise from inverted latents):
-from stable_audio_3.inference.sampling import sample_diffusion
-sample_diffusion(
-    model=dm, noise=inverted_latents,
-    cond_inputs=merged, diffusion_objective="rectified_flow",
-    steps=n, cfg_scale=cfg, pretransform=dm.pretransform,
-    decode=True, chunked_decode=True, disable_tqdm=True,
-)
+# Schedule + padding mask (build them like sample_diffusion/generate do):
+from stable_audio_3.inference.sampling import build_schedule         # descending 1.0→0.0
+from stable_audio_3.data.utils import (
+    compute_effective_seq_len_from_conditioning, create_padding_mask_from_lengths)
 ```
 
-`cond_inputs` for CFG: concatenate positive and negative conditioning tensors along batch dim 0 before passing to `sample_diffusion`. The sampler handles the split and CFG weighting internally.
+The RF-Inversion cell hand-rolls both ODE loops directly on `dit` rather than calling `sample_diffusion`, because the reverse η-controller is not expressible through the stock sampler. At η=0 the reverse loop is byte-for-byte equivalent to `sample_discrete_euler`, which is the correctness anchor.
 
 ---
 
 ## 10. Future Work / Open Items
 
-- [ ] **RF-Inversion robustness:** The current implementation may break if `dm.conditioner` or `dm.get_conditioning_inputs` are renamed in a future SA3 release. The fallback (guided A2A) provides a safety net but not true inversion.
-- [ ] **RF-Inversion generation phase:** Currently uses `sample_diffusion` directly; verify CFG handling matches the standard generate() path for consistency.
+- [ ] **RF-Inversion robustness:** Now runs real two-controller inversion on `sa3.dit` (no silent A2A substitution). May still break if `inner.conditioner`, `get_conditioning_inputs`, `build_schedule`, or the DiT forward signature are renamed in a future SA3 release; the guarded fallback surfaces the real exception.
+- [ ] **RF-Inversion tuning:** η (structure preservation) defaults to 0.0 (off). Good faithful-edit presets (γ≈0.3–0.5, η≈0.3–0.6, eta_stop≈0.3) are untested on hardware — needs a GPU pass to lock in defaults.
 - [ ] **Steps slider for A2A:** Currently hardcoded to 8. Exposing it (range 4–50) would let users trade speed for quality.
 - [ ] **Session audio persistence:** Audio saved to `_session_audio` is lost on kernel restart. A Drive-backed save option would improve the batch workflow.
 - [ ] **Intro cell:** Section references in the intro HTML still say "section 5 & 7" — should be updated to mention sections 8 and 9.
