@@ -20,6 +20,7 @@ The complete guide to the notebook. For the short version, see the [README](READ
 | 🎚️ RF-Inversion | §9 | Re-style a clip while preserving its melody and rhythm |
 | 🌅 Audio Transition | §10 | Morph clip A into clip B with a latent-space crossfade |
 | 🔁 Extend & Loop | §11 | Continue a clip, compose an intro, or make it loop seamlessly |
+| 🔍 Clip Inspector | §12 | Instant waveform, spectrogram, and level stats for any clip |
 
 **Who it's for:** musicians and producers sketching ideas, sound designers, hobbyists, and anyone curious about audio diffusion — no coding or local install required.
 
@@ -82,6 +83,7 @@ Cells run top to bottom. Sections 1–4 are one-time setup; each tool after that
 | **9 — RF-Inversion** | Structure-preserving re-styling | As needed |
 | **10 — Audio Transition** | Morph clip A into clip B | As needed |
 | **11 — Extend & Loop** | Continue / intro / seamless loop | As needed |
+| **12 — Clip Inspector** | Waveform / spectrogram / level analysis (no model) | As needed |
 
 **Session clips:** every tool's result is auto-registered in a session list (renameable in §5), and every tool's source dropdown refreshes the moment a clip is added. All the audio-input tools (§7–§11) can pick from that list, from an upload, or from a Drive folder — so you can chain tools in any order: generate → inpaint a section → make variations → extend the best one → morph two takes together, with zero downloads in between.
 
@@ -156,6 +158,7 @@ Model, duration, prompt, plus the **Advanced options** accordion (negative promp
 Pick a source clip, set the **mask** (start/end seconds — the waveform view shows it in amber; *Preview mask* plays just that region), describe the replacement, generate. Everything outside the mask is held fixed at every denoising step, so the surroundings are bit-faithful.
 
 - **CFG** (0–15, default 1.0): at 1.0 the fill blends seamlessly but follows the prompt loosely; 2–4 follows the prompt clearly with some risk of seam artifacts at the mask boundaries.
+- **Negative prompt, steps, and seed** work as in the other tools — fix the seed to reproduce a good fill exactly while you tweak one parameter.
 - Masks from ~0.5 s (a hit or fill) up to many seconds (a whole phrase) both work. The clip must fit within the model's max duration — longer files are truncated.
 - The result offers a download with optional **click markers** at the mask edges, so you can find the seam in a DAW.
 
@@ -200,6 +203,10 @@ All three modes ride the inpainting engine: only the chosen region is regenerate
 - **Extend intro** — the mirror image: a lead-in is composed that arrives at your clip's downbeat.
 - **Seamless loop** — the clip is rotated so its start/end joint sits mid-clip, a **seam window** (0.5–8 s) around the joint is regenerated, and the clip is rotated back. The result panel includes a *seam check* player (the loop twice back to back, the joint passing at the midpoint). Small windows make surgical fixes; large ones recompose the whole transition.
 - **Prompt** describes only the regenerated region — `drum fill into a drop`, `soft outro, fading pads` — or leave it blank to let the surrounding context decide. CFG and steps behave as in §7/§8.
+
+### §12 Clip Inspector
+
+No parameters and no model — select a clip and it's analysed on the spot: peak/RMS levels in dBFS, crest factor, a clipping warning if a meaningful fraction of samples sits at full scale, a peak-preserving waveform, and a 0–22 kHz spectrogram. Use it to compare §5 takes at a glance (thin high end and smeared transients show up immediately in the spectrogram) or to check an extension's seam visually.
 
 - **Model loading is the slow part, generation is fast.** First-ever load: 1–3 min download + ~60–90 s initialization (the notebook prints progress and a heartbeat). Subsequent sessions read weights from your Drive cache; within a session the model stays in RAM and re-generation starts instantly.
 - **Generation speed:** with 8 steps on an A100/L4, expect a handful of seconds for a 30 s clip on `medium`; T4 and CPU are progressively slower. RF-Inversion at 50 steps is roughly an order of magnitude slower than a standard generate.

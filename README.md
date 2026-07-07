@@ -25,7 +25,7 @@ the result is decoded back to a waveform. Most tools share a few controls:
 Generate audio from a text prompt — *"warm lo-fi piano with vinyl crackle, 70 bpm"*. The model denoises from pure random noise into a clip. Controls: prompt, duration, and (under Advanced options) negative prompt, steps, CFG scale, seed, and **takes** — generate up to four seeds of the same prompt in one click and keep the best. Every result shows the seed that made it.
 
 ### ✂️ Inpainting (audio editing)
-Replace a chosen time region of a clip while keeping everything outside it untouched. The clip is encoded to latents, a mask covers the `[start, end]` seconds you pick, and only the masked region is regenerated from the prompt — the unmasked latents are held fixed at every denoising step, so the surrounding audio is preserved. Good for fixing a section or dropping in a new phrase.
+Replace a chosen time region of a clip while keeping everything outside it untouched. The clip is encoded to latents, a mask covers the `[start, end]` seconds you pick, and only the masked region is regenerated from the prompt — the unmasked latents are held fixed at every denoising step, so the surrounding audio is preserved. Good for fixing a section or dropping in a new phrase. Full control set: prompt, negative prompt, CFG, steps, seed.
 
 ### 🔀 Audio-to-Audio (variations)
 Generate a variation of an existing clip. The source is encoded to latents and mixed with random noise at a chosen **noise level** before denoising: low noise stays close to the original (subtle remix), high noise drifts further (loose reinterpretation). Add a prompt and raise CFG to steer the variation.
@@ -41,6 +41,9 @@ Blend two clips into a single A→B transition. Both are encoded to latents, and
 
 ### 🔁 Extend & Loop
 Outpainting, three ways: **continue** a clip past its end, compose a **lead-in** before it, or turn it into a **seamless loop** — the clip is rotated so its start/end joint sits in the middle, the joint is regenerated with the inpainting engine, and the clip is rotated back. A "seam check" player plays the loop twice back to back so you can judge the joint.
+
+### 🔍 Clip Inspector
+Not a generator — a magnifier. Select any session clip and it's analysed instantly: waveform, spectrogram, and level stats (peak/RMS dBFS, crest factor, clipping check). Runs in a second on CPU; handy for comparing takes before you commit to one.
 
 ## Models
 

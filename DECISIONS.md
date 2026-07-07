@@ -117,3 +117,15 @@ Running log of every meaningful design decision in the project, oldest first. Ea
 - **Why:** §5 silently ignored seed/CFG/steps that the README claimed it had; "hide advanced options unless needed" (the brief) is an accordion, not omission. The A2A steps exposure was a logged open item. One README can't be both a 30-second pitch and a reference manual.
 - **Benefit:** Reproducible §5 results (fixed seed) and prompt-adherence control without cluttering the default view; honest intro; docs that serve both audiences.
 - **Downside:** More surface area to keep consistent between UI and docs; defaults must stay obviously "fine untouched" so the accordion never becomes required reading.
+### 2026-07-07 — §7 inpainting brought up to the shared control standard
+- **What:** Inpainting gains a negative prompt, a steps slider (4–50), and a seed box; the `generate()` call passes all three (steps was hardcoded to 8 and seed wasn't passed at all).
+- **Why:** Every other generation tool already exposed these; §7 results were unreproducible by construction (no seed), which broke the fix-the-seed-tweak-one-thing workflow everywhere else in the notebook.
+- **Benefit:** Uniform mental model across tools; a good fill can be reproduced and refined.
+- **Downside:** Three more controls in an already tall cell — mitigated by keeping the same compact label style and defaults that need no touching.
+
+### 2026-07-07 — §12 Clip Inspector (analysis, not generation)
+- **What:** New model-free cell: pick any session clip (analysis fires on selection — no button) → level stats (peak/RMS dBFS, crest factor, clipping warning at >0.05 % full-scale samples), peak-preserving decimated waveform, and a 2048-point spectrogram. Registers a session listener so new clips appear instantly.
+- **Why:** The evaluate step of the generate→listen→pick loop had no tooling; ears alone are slow at comparing four takes, and clipping/thin-high-end problems are visible before they are audible on laptop speakers.
+- **Benefit:** Instant, zero-GPU feedback; makes the §5 multi-take feature genuinely useful.
+- **Downside:** ~1 s of matplotlib per selection; stats are quick engineering measures (RMS dBFS), not perceptual loudness (LUFS) — close enough for take comparison, labeled honestly.
+

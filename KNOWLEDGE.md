@@ -192,9 +192,10 @@ Cell 13 A2A           ← depends on: get_model, widgets, Layout, Audio, SPINNER
 Cell 14 RF-Inversion  ← same deps as A2A
 Cell 15 Morph         ← same deps; RFI re-coherence toggle needs cell 14 run once
 Cell 16 Extend & Loop ← same deps as A2A (public inpaint API only)
+Cell 17 Clip Inspector ← widgets + matplotlib only; no model, no GPU
 ```
 
-Cells 13, 14, and 16 can be run independently as long as cells 3–9 have run first. They do not depend on cell 12 (inpainting).
+Cells 13, 14, 16, and 17 can be run independently as long as cells 3–9 have run first. They do not depend on cell 12 (inpainting).
 
 ### Key shared globals (defined in Utilities cell)
 
