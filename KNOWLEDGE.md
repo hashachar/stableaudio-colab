@@ -338,7 +338,7 @@ The RF-Inversion cell hand-rolls both ODE loops directly on `dit` rather than ca
 
 - [ ] **RF-Inversion robustness:** Now runs real two-controller inversion on `sa3.dit` (no silent A2A substitution). May still break if `inner.conditioner`, `get_conditioning_inputs`, `build_schedule`, or the DiT forward signature are renamed in a future SA3 release; the guarded fallback surfaces the real exception.
 - [ ] **RF-Inversion tuning:** η (structure preservation) defaults to 0.0 (off). Good faithful-edit presets (γ≈0.3–0.5, η≈0.3–0.6, eta_stop≈0.3) are untested on hardware — needs a GPU pass to lock in defaults.
-- [ ] **Steps slider for A2A:** Currently hardcoded to 8. Exposing it (range 4–50) would let users trade speed for quality.
+- [x] **Steps slider for A2A:** Done 2026-07-06 — `a2a_steps_slider` (4–50, default 8). §5 also gained a collapsed Advanced accordion (negative prompt, steps, CFG, seed) the same day; `generate_audio()` now accepts `negative_prompt`.
 - [ ] **Session audio persistence:** Audio saved to `_session_audio` is lost on kernel restart. A Drive-backed save option would improve the batch workflow.
-- [ ] **Intro cell:** Section references in the intro HTML still say "section 5 & 7" — should be updated to mention sections 8 and 9.
+- [x] **Intro cell:** Done 2026-07-06 — intro footer now lists all five tools (§5/§7/§8/§9/§10).
 - [ ] **RF-Inversion for Colab notebook:** The maxgraf96 plugin has battle-tested A2A/inpaint presets. Those noise/cfg defaults could be cross-referenced to tune the notebook defaults.

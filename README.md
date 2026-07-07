@@ -10,6 +10,8 @@ Make music from a text prompt, edit it, remix it, and morph clips into each othe
 
 This link always opens the latest version in Colab. Run the short setup cells once (pick a GPU runtime if you can), then jump to whichever tool you want. Each tool has its own controls and a single run button.
 
+**Full documentation:** [GUIDE.md](GUIDE.md) — quick start, prompt-engineering guide, every parameter explained, performance tips, FAQ, and troubleshooting. Design history lives in [DECISIONS.md](DECISIONS.md).
+
 All five tools run on the same latent rectified-flow diffusion model: your audio
 is encoded into a compact **latent** representation, the model denoises it, and
 the result is decoded back to a waveform. Most tools share a few controls:
