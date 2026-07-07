@@ -10,15 +10,16 @@ The complete guide to the notebook. For the short version, see the [README](READ
 
 **Stable Audio 3** is Stability AI's family of open-weight text-to-audio models. It is a *latent rectified-flow diffusion* model: audio is compressed by an autoencoder (VAE) into a compact latent sequence, a diffusion transformer (DiT) denoises latents under the guidance of a T5-encoded text prompt, and the VAE decodes the result back to 44.1 kHz stereo audio. The models are distilled for few-step sampling — the default is just **8 denoising steps**, which is why generation takes seconds rather than minutes.
 
-**This notebook** wraps two model variants in five interactive tools, all running in your browser on a free or paid Google Colab runtime:
+**This notebook** wraps two model variants in six interactive tools, all running in your browser on a free or paid Google Colab runtime:
 
 | Tool | Section | What it does |
 |---|---|---|
-| 🎵 Text-to-music | §5 | Generate a clip from a text prompt |
+| 🎵 Text-to-music | §5 | Generate a clip from a text prompt (up to 4 takes per click) |
 | ✂️ Inpainting | §7 | Regenerate a chosen time region of a clip, keep the rest |
 | 🔀 Audio-to-Audio | §8 | Generate a variation of an existing clip |
 | 🎚️ RF-Inversion | §9 | Re-style a clip while preserving its melody and rhythm |
 | 🌅 Audio Transition | §10 | Morph clip A into clip B with a latent-space crossfade |
+| 🔁 Extend & Loop | §11 | Continue a clip, compose an intro, or make it loop seamlessly |
 
 **Who it's for:** musicians and producers sketching ideas, sound designers, hobbyists, and anyone curious about audio diffusion — no coding or local install required.
 
@@ -80,8 +81,9 @@ Cells run top to bottom. Sections 1–4 are one-time setup; each tool after that
 | **8 — Audio-to-Audio** | Variations of an existing clip | As needed |
 | **9 — RF-Inversion** | Structure-preserving re-styling | As needed |
 | **10 — Audio Transition** | Morph clip A into clip B | As needed |
+| **11 — Extend & Loop** | Continue / intro / seamless loop | As needed |
 
-**Session clips:** every generated result is auto-registered in a session list (renameable). All the audio-input tools (§7–§10) can pick from that list, from an upload, or from a Drive folder — so you can chain tools: generate → inpaint a section → make variations → morph two takes together.
+**Session clips:** every tool's result is auto-registered in a session list (renameable in §5), and every tool's source dropdown refreshes the moment a clip is added. All the audio-input tools (§7–§11) can pick from that list, from an upload, or from a Drive folder — so you can chain tools in any order: generate → inpaint a section → make variations → extend the best one → morph two takes together, with zero downloads in between.
 
 ---
 
@@ -145,7 +147,9 @@ Parameters shared by several tools:
 
 ### §5 Text-to-music
 
-Model, duration, prompt, plus the **Advanced options** accordion (negative prompt, steps, CFG, seed). Defaults are correct for everyday use; open the accordion when you want reproducibility (fixed seed) or stronger prompt adherence (CFG 2–4).
+Model, duration, prompt, plus the **Advanced options** accordion (negative prompt, steps, CFG, seed, takes). Defaults are correct for everyday use; open the accordion when you want reproducibility (fixed seed) or stronger prompt adherence (CFG 2–4).
+
+- **Takes** (1–4): one click generates several takes of the same prompt, each from its own seed, shown side by side with per-take download buttons. With a fixed seed, takes use seed, seed+1, seed+2… Every result panel shows the seed that made it — enter that seed later to reproduce the take exactly.
 
 ### §7 Inpainting
 
@@ -188,9 +192,14 @@ Clips A and B are encoded to latents; across the transition region, latent frame
 - **RF-Inversion re-coherence** (checkbox) — repairs the seam with the structure-preserving §9 method instead of blind A2A (run §9's cell once first). Slower, but changes the original material less.
 - **CFG** (0–8) matters only when you give the re-coherence pass a prompt.
 
----
+### §11 Extend & Loop
 
-## Performance Tips
+All three modes ride the inpainting engine: only the chosen region is regenerated and everything else is preserved exactly, with ~0.5 s of existing audio at each joint re-written so the splice is *composed*, not glued.
+
+- **Continue end** — silence is appended after the clip and the model fills it, conditioned on what came before. **Extension** (1–60 s) sets how much is added; source + extension must fit the model's max duration.
+- **Extend intro** — the mirror image: a lead-in is composed that arrives at your clip's downbeat.
+- **Seamless loop** — the clip is rotated so its start/end joint sits mid-clip, a **seam window** (0.5–8 s) around the joint is regenerated, and the clip is rotated back. The result panel includes a *seam check* player (the loop twice back to back, the joint passing at the midpoint). Small windows make surgical fixes; large ones recompose the whole transition.
+- **Prompt** describes only the regenerated region — `drum fill into a drop`, `soft outro, fading pads` — or leave it blank to let the surrounding context decide. CFG and steps behave as in §7/§8.
 
 - **Model loading is the slow part, generation is fast.** First-ever load: 1–3 min download + ~60–90 s initialization (the notebook prints progress and a heartbeat). Subsequent sessions read weights from your Drive cache; within a session the model stays in RAM and re-generation starts instantly.
 - **Generation speed:** with 8 steps on an A100/L4, expect a handful of seconds for a 30 s clip on `medium`; T4 and CPU are progressively slower. RF-Inversion at 50 steps is roughly an order of magnitude slower than a standard generate.
@@ -218,6 +227,10 @@ Clips A and B are encoded to latents; across the transition region, latent frame
 **Can I use outputs commercially?** That's governed by the Stability AI community license you accept on the model page — read it; terms depend on your revenue.
 
 **Why is the first generation after loading fast, but the very first load so slow?** Loading pays for the download (once ever, thanks to the Drive cache), weight initialization, and a warmup generation. Everything after that is pure sampling.
+
+**Can I make a track longer than the model's max duration?** Not in one pass — the total output of any tool is capped at the model max (120 s / 285 s). The workflow for longer pieces: generate sections separately (§5 or §11 Continue), then join them in a DAW, using §10 (Transition) to compose the joins.
+
+**How do I make a clip loop?** §11, Seamless loop mode. Use the seam-check player (the loop twice in a row) to judge the joint before downloading.
 
 **Can I run this locally?** The `stable-audio-3` package works anywhere with a suitable GPU, but this notebook's UI is Colab-specific (secrets, Drive mounting, upload widgets).
 

@@ -167,9 +167,15 @@ This is implemented for real — **both** RF-Inversion controllers run directly 
 
 **Recommended steps:** 50 (used for both phases). 20–30 for fast previews. Cost ≈ 3× a normal generate of the same step count (Phase 1 is unconditional 1×/step, Phase 2 is CFG 2×/step).
 
----
+### 4.5 Extend & Loop (outpainting) — added 2026-07-06
 
-## 5. Notebook Architecture
+Pure applications of the §4.2 inpainting API (`generate(inpaint_audio=…, inpaint_mask_*_seconds=…)`) — no model internals:
+
+- **Continue end:** `padded = cat([src, zeros(ext)])`, mask `[src_dur − 0.5, target]`, `duration=target`. The 0.5 s overlap (`_EXT_SEAM_OVERLAP`) re-writes the source's tail so the splice is composed.
+- **Extend intro:** mirror — `padded = cat([zeros(pad), src])`, mask `[0, pad + 0.5]`.
+- **Seamless loop:** `rolled = torch.roll(src, n//2, dims=-1)` puts the start/end joint mid-clip; inpaint a seam window around `src_dur/2`; trim/pad output to the input length; `torch.roll(out, −n//2)` puts the regenerated joint back at the boundary. Output length is guarded (trim/pad) before the roll-back because the roll-back mapping assumes equal lengths.
+
+Constraints: total output ≤ model max duration (extends validate headroom; loop errors if `src_dur > cap` rather than silently truncating, which would break sample-exactness). Loop needs ≥ 4 s source. Cell id `cell-12-extend`, widgets prefixed `ext_*`/`_ext_*`.
 
 ### Cell dependency chain
 
@@ -184,9 +190,11 @@ Cell 9  Generate      ← SPINNER_HTML defined here
 Cell 12 Inpainting    ← defines _limit_note_html()
 Cell 13 A2A           ← depends on: get_model, widgets, Layout, Audio, SPINNER_HTML
 Cell 14 RF-Inversion  ← same deps as A2A
+Cell 15 Morph         ← same deps; RFI re-coherence toggle needs cell 14 run once
+Cell 16 Extend & Loop ← same deps as A2A (public inpaint API only)
 ```
 
-Cells 13 and 14 can be run independently as long as cells 3–9 have run first. They do not depend on cell 12 (inpainting).
+Cells 13, 14, and 16 can be run independently as long as cells 3–9 have run first. They do not depend on cell 12 (inpainting).
 
 ### Key shared globals (defined in Utilities cell)
 
@@ -195,9 +203,11 @@ Cells 13 and 14 can be run independently as long as cells 3–9 have run first. 
 | `SAMPLE_RATE` | `int` | 44100 — canonical sample rate throughout |
 | `MODEL_CONFIGS` | `dict` | Per-model metadata (max duration, defaults, GPU flag) |
 | `_model_cache` | `dict` | `model_name → StableAudioModel` — keeps model in memory |
-| `_session_audio` | `dict` | `title → /tmp/*.wav` — audio saved from Generate cell |
+| `_session_audio` | `dict` | `title → /tmp/*.wav` — every tool's results land here (2026-07-06) |
 | `get_model(name)` | `fn` | Load or return cached model; evicts other cached models first |
 | `_is_model_on_disk(name)` | `fn` | Checks HF cache for model checkpoint |
+| `_session_audio_listeners` | `dict` | `tag → callback` — tool cells register dropdown-refresh callbacks via `_add_session_listener(tag, cb)`; tags dedupe cell re-runs |
+| `_register_session_clip(title, path)` | `fn` | Copies a result wav to a unique `/tmp` path (fixed result paths get overwritten next run), registers it, fires all listeners; returns the (uniquified) title |
 
 ### Model caching pattern
 
@@ -340,5 +350,5 @@ The RF-Inversion cell hand-rolls both ODE loops directly on `dit` rather than ca
 - [ ] **RF-Inversion tuning:** η (structure preservation) defaults to 0.0 (off). Good faithful-edit presets (γ≈0.3–0.5, η≈0.3–0.6, eta_stop≈0.3) are untested on hardware — needs a GPU pass to lock in defaults.
 - [x] **Steps slider for A2A:** Done 2026-07-06 — `a2a_steps_slider` (4–50, default 8). §5 also gained a collapsed Advanced accordion (negative prompt, steps, CFG, seed) the same day; `generate_audio()` now accepts `negative_prompt`.
 - [ ] **Session audio persistence:** Audio saved to `_session_audio` is lost on kernel restart. A Drive-backed save option would improve the batch workflow.
-- [x] **Intro cell:** Done 2026-07-06 — intro footer now lists all five tools (§5/§7/§8/§9/§10).
+- [x] **Intro cell:** Done 2026-07-06 — intro footer now lists all six tools (§5/§7/§8/§9/§10/§11).
 - [ ] **RF-Inversion for Colab notebook:** The maxgraf96 plugin has battle-tested A2A/inpaint presets. Those noise/cfg defaults could be cross-referenced to tune the notebook defaults.

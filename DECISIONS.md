@@ -94,6 +94,24 @@ Running log of every meaningful design decision in the project, oldest first. Ea
 - **Benefit:** First real prompt runs at full speed; power users can still opt into compile for batch runs.
 - **Downside:** Warmup adds ~seconds to load; compile users pay one JIT (once ever, thanks to the Drive cache).
 
+### 2026-07-06 — Session-clip chaining: every tool registers its result; live dropdown refresh everywhere
+- **What:** Utilities' single-callback `_on_session_audio_updated` hook became a tagged listener registry (`_add_session_listener`), plus a `_register_session_clip()` helper that copies a result to a unique `/tmp` path (fixed result paths get overwritten by the next run) and notifies all listeners. Inpainting, A2A, RF-Inversion, morph — and the new §11 — now register their outputs and refresh their source dropdowns the moment any tool saves a clip.
+- **Why:** Only §5 registered results and only inpainting listened for changes, so chaining tool outputs (the notebook's core workflow) silently required download/re-upload or cell re-runs.
+- **Benefit:** Generate → inpaint → vary → extend → morph in any order, zero friction; tags make cell re-runs replace their listener instead of stacking duplicates.
+- **Downside:** Each registered clip is a wav copy in `/tmp` (a few MB each; ephemeral disk, so acceptable).
+
+### 2026-07-06 — §5 multi-take generation with always-visible seeds
+- **What:** A **Takes** slider (1–4) in the Advanced accordion generates N takes of the prompt in one click, each from its own seed, with per-take players and download buttons. Seeds are now always drawn explicitly (never left to the library's internal RNG) so every result panel displays the seed that produced it.
+- **Why:** Diffusion output quality varies take to take; the fastest intention→output path is hearing several seeds at once. And a result whose seed is unknown is unreproducible by construction.
+- **Benefit:** One click replaces four generate-listen-regenerate cycles; any take can be reproduced or refined (fix the seed, tweak one parameter).
+- **Downside:** N takes cost N generations of wall-clock time; capped at 4 to keep the button honest.
+
+### 2026-07-06 — §11 Extend & Loop (outpainting via the inpainting engine)
+- **What:** New tool with three modes built on the public `generate(inpaint_audio=…)` API: **Continue end** (append silence, mask it, let the model fill), **Extend intro** (the mirror), and **Seamless loop** (`torch.roll` the clip half-way so the start/end joint sits mid-clip, inpaint a seam window around it, roll back; a seam-check player plays the loop ×2). Every joint re-writes ~0.5 s of existing audio (`_EXT_SEAM_OVERLAP`) so splices are composed rather than butt-joined.
+- **Why:** Continuation/extension and loop-making are the two most-requested creative operations the architecture supports that weren't exposed; both are pure applications of masking, needing no model internals (unlike RF-Inversion).
+- **Benefit:** Clip extension and DAW-ready loops with the reliability profile of §7; works on small-music (CPU) too.
+- **Downside:** Total output is still capped at the model max, so extension can't exceed it; loop mode assumes `generate()` returns sample counts matching the request (guarded by trim/pad before the roll-back).
+
 ### 2026-07-06 — §5 Advanced accordion; A2A steps slider; docs split
 - **What:** (1) §5 gains a collapsed **Advanced options** accordion — negative prompt, steps 4–50, CFG 0–15, seed — and `generate_audio()` gains `negative_prompt`. (2) §8's hardcoded `steps=8` becomes a 4–50 slider. (3) Intro cell finally lists all five tools. (4) Documentation split: lean `README.md` landing page, comprehensive `GUIDE.md` user guide, this `DECISIONS.md`.
 - **Why:** §5 silently ignored seed/CFG/steps that the README claimed it had; "hide advanced options unless needed" (the brief) is an accordion, not omission. The A2A steps exposure was a logged open item. One README can't be both a 30-second pitch and a reference manual.
